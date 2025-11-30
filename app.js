@@ -1,5 +1,6 @@
 const checkBtn = document.getElementById("checkBtn");
 const output = document.getElementById("output");
+console.log("App started");
 
 // YOUR LOCATION RANGE (replace with your real values)
 const X_MIN = 5.0390;
@@ -14,6 +15,7 @@ checkBtn.addEventListener("click", async () => {
   let xs = [];
   let ys = [];
 
+  console.log("Collecting GPS readings");
   for (let i = 0; i < 5; i++) {
     try {
       const pos = await getPosition();

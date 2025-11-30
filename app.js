@@ -6,7 +6,7 @@ console.log("App started");
 const X_MIN = 5.0390;
 const X_MAX = 5.0395;
 
-const Y_MIN = 7.9755;
+const Y_MIN = 7.9752;
 const Y_MAX = 7.9756;
 
 checkBtn.addEventListener("click", async () => {

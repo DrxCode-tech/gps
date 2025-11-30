@@ -1,101 +1,63 @@
-let watchID = null;
+const readingsNeeded = 5;
 
-// DOM elements
-const output = document.getElementById("locationOutput");
-const logContainer = document.getElementById("logContainer");
+// Your boundary box
+const X_MAX = 5.0395;
+const X_MIN = 5.0380;
 
-// Load logs on start
-loadLogs();
+const Y_MAX = 7.9760;
+const Y_MIN = 7.9752;
 
-document.getElementById("startTracking").addEventListener("click", () => {
-    if (!navigator.geolocation) {
-        output.innerHTML = "<p style='color:red;'>Geolocation not supported.</p>";
-        return;
+document.getElementById("checkBtn").addEventListener("click", async () => {
+    const output = document.getElementById("output");
+    output.textContent = "Collecting GPS data...\n";
+
+    const latList = [];
+    const lonList = [];
+
+    for (let i = 1; i <= readingsNeeded; i++) {
+        const pos = await getPosition();
+
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lon = parseFloat(pos.coords.longitude.toFixed(6));
+
+        latList.push(lat);
+        lonList.push(lon);
+
+        output.textContent += `Reading ${i}:  Lat=${lat}, Lon=${lon}\n`;
     }
 
-    output.innerHTML = "<p>Tracking started… waiting for GPS signal.</p>";
+    // Compute averages
+    const avgLat = average(latList);
+    const avgLon = average(lonList);
 
-    watchID = navigator.geolocation.watchPosition(
-        positionSuccess,
-        positionError,
-        {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000
-        }
-    );
-});
+    output.textContent += `\nAverage Lat: ${avgLat}`;
+    output.textContent += `\nAverage Lon: ${avgLon}\n`;
 
-document.getElementById("stopTracking").addEventListener("click", () => {
-    if (watchID !== null) {
-        navigator.geolocation.clearWatch(watchID);
-        watchID = null;
-        output.innerHTML = "<p>Tracking stopped.</p>";
+    const inX = avgLat <= X_MAX && avgLat >= X_MIN;
+    const inY = avgLon <= Y_MAX && avgLon >= Y_MIN;
+
+    output.textContent += `\nLatitude in range: ${inX}`;
+    output.textContent += `\nLongitude in range: ${inY}\n`;
+
+    if (inX && inY) {
+        output.textContent += `\n✅ USER IS WITHIN ALLOWED LOCATION`;
+    } else {
+        output.textContent += `\n❌ USER IS OUTSIDE LOCATION`;
     }
 });
 
-document.getElementById("clearLogs").addEventListener("click", () => {
-    localStorage.removeItem("gps_logs");
-    logContainer.innerHTML = "";
-});
-
-// -----------------------
-// SUCCESS HANDLER
-// -----------------------
-function positionSuccess(pos) {
-    const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-    const timestamp = new Date(pos.timestamp).toLocaleString();
-
-    // Speed is in m/s → convert to km/h
-    const kmh = speed ? (speed * 3.6).toFixed(2) : 0;
-
-    output.innerHTML = `
-        <h3>Live Position</h3>
-        <p><strong>Latitude:</strong> ${latitude}</p>
-        <p><strong>Longitude:</strong> ${longitude}</p>
-        <p><strong>Accuracy:</strong> ${accuracy} meters</p>
-        <p><strong>Speed:</strong> ${kmh} km/h</p>
-        <p><strong>Direction:</strong> ${heading ?? "Not Available"}</p>
-        <p><strong>Time:</strong> ${timestamp}</p>
-    `;
-
-    saveLog({ latitude, longitude, accuracy, kmh, heading, timestamp });
-    loadLogs();
+// Helper: get GPS reading (Promise version)
+function getPosition() {
+    return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            resolve,
+            reject,
+            { enableHighAccuracy: true, timeout: 15000 }
+        );
+    });
 }
 
-// -----------------------
-// ERROR HANDLER
-// -----------------------
-function positionError(err) {
-    let msg = "Unknown error";
-    if (err.code === 1) msg = "Permission denied";
-    if (err.code === 2) msg = "Position unavailable";
-    if (err.code === 3) msg = "Request timed out (GPS weak)";
-
-    output.innerHTML = `<p style="color:red;">${msg}</p>`;
-}
-
-// -----------------------
-// SAVE LOG TO LOCALSTORAGE
-// -----------------------
-function saveLog(data) {
-    let logs = JSON.parse(localStorage.getItem("gps_logs")) || [];
-    logs.push(data);
-    localStorage.setItem("gps_logs", JSON.stringify(logs));
-}
-
-// -----------------------
-// LOAD LOGS TO SCREEN
-// -----------------------
-function loadLogs() {
-    let logs = JSON.parse(localStorage.getItem("gps_logs")) || [];
-    logContainer.innerHTML = logs
-        .map(log => `
-            <div class="log-item">
-                <p>📍 <strong>${log.latitude}, ${log.longitude}</strong></p>
-                <p>Accuracy: ${log.accuracy}m – Speed: ${log.kmh} km/h</p>
-                <p>Heading: ${log.heading} – Time: ${log.timestamp}</p>
-            </div>
-        `)
-        .join("");
+// Helper: average numbers
+function average(arr) {
+    return (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(6);
 }

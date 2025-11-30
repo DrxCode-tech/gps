@@ -1,29 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Offline Geolocation Tracker</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <title>Location Verifier</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-    <div class="container">
-        <h1>📍 Offline Geolocation Tracker</h1>
+  <div class="container">
+    <h1>Position Checker</h1>
 
-        <button id="startTracking">Start Tracking</button>
-        <button id="stopTracking" class="stop">Stop Tracking</button>
+    <button id="checkBtn">Check If I'm In The Right Area</button>
 
-        <div class="output" id="locationOutput">
-            <p>Press "Start Tracking"…</p>
-        </div>
+    <div id="status">Click the button to start...</div>
 
-        <h2>📜 Saved Logs</h2>
-        <div id="logContainer" class="logs"></div>
-
-        <button id="clearLogs" class="clear">Clear Logs</button>
+    <div class="box">
+      <h3>Final Result:</h3>
+      <p id="result">—</p>
     </div>
 
-    <script src="app.js"></script>
+    <div class="box">
+      <h3>Debug Log:</h3>
+      <pre id="log"></pre>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>

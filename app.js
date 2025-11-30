@@ -1,101 +1,77 @@
-let watchID = null;
+const checkBtn = document.getElementById("checkBtn");
+const statusDiv = document.getElementById("status");
+const resultDiv = document.getElementById("result");
+const logBox = document.getElementById("log");
 
-// DOM elements
-const output = document.getElementById("locationOutput");
-const logContainer = document.getElementById("logContainer");
+// YOUR RANGE LIMITS (from your data)
+const X_MIN = 5.0390;
+const X_MAX = 5.0395;
 
-// Load logs on start
-loadLogs();
+const Y_MIN = 7.9755;
+const Y_MAX = 7.9756;
 
-document.getElementById("startTracking").addEventListener("click", () => {
-    if (!navigator.geolocation) {
-        output.innerHTML = "<p style='color:red;'>Geolocation not supported.</p>";
-        return;
-    }
+checkBtn.addEventListener("click", () => {
+  statusDiv.textContent = "Collecting location readings...";
+  resultDiv.textContent = "—";
+  logBox.textContent = "";
+  collectAveragedLocation();
+});
 
-    output.innerHTML = "<p>Tracking started… waiting for GPS signal.</p>";
+function collectAveragedLocation() {
+  let readingsX = [];
+  let readingsY = [];
+  let count = 0;
+  let totalReadingsRequired = 5;
 
-    watchID = navigator.geolocation.watchPosition(
-        positionSuccess,
-        positionError,
-        {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000
+  const interval = setInterval(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        let lat = parseFloat(pos.coords.latitude.toFixed(4));
+        let lon = parseFloat(pos.coords.longitude.toFixed(4));
+
+        readingsX.push(lat);
+        readingsY.push(lon);
+        count++;
+
+        logBox.textContent += `Reading ${count}:  X=${lat},  Y=${lon}\n`;
+
+        if (count === totalReadingsRequired) {
+          clearInterval(interval);
+          computeDecision(readingsX, readingsY);
         }
+      },
+      (err) => {
+        logBox.textContent += `ERROR: ${err.message}\n`;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
     );
-});
-
-document.getElementById("stopTracking").addEventListener("click", () => {
-    if (watchID !== null) {
-        navigator.geolocation.clearWatch(watchID);
-        watchID = null;
-        output.innerHTML = "<p>Tracking stopped.</p>";
-    }
-});
-
-document.getElementById("clearLogs").addEventListener("click", () => {
-    localStorage.removeItem("gps_logs");
-    logContainer.innerHTML = "";
-});
-
-// -----------------------
-// SUCCESS HANDLER
-// -----------------------
-function positionSuccess(pos) {
-    const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-    const timestamp = new Date(pos.timestamp).toLocaleString();
-
-    // Speed is in m/s → convert to km/h
-    const kmh = speed ? (speed * 3.6).toFixed(2) : 0;
-
-    output.innerHTML = `
-        <h3>Live Position</h3>
-        <p><strong>Latitude:</strong> ${latitude}</p>
-        <p><strong>Longitude:</strong> ${longitude}</p>
-        <p><strong>Accuracy:</strong> ${accuracy} meters</p>
-        <p><strong>Speed:</strong> ${kmh} km/h</p>
-        <p><strong>Direction:</strong> ${heading ?? "Not Available"}</p>
-        <p><strong>Time:</strong> ${timestamp}</p>
-    `;
-
-    saveLog({ latitude, longitude, accuracy, kmh, heading, timestamp });
-    loadLogs();
+  }, 1500); // wait 1.5s between each reading for accuracy
 }
 
-// -----------------------
-// ERROR HANDLER
-// -----------------------
-function positionError(err) {
-    let msg = "Unknown error";
-    if (err.code === 1) msg = "Permission denied";
-    if (err.code === 2) msg = "Position unavailable";
-    if (err.code === 3) msg = "Request timed out (GPS weak)";
+function computeDecision(xs, ys) {
+  const avgX = average(xs);
+  const avgY = average(ys);
 
-    output.innerHTML = `<p style="color:red;">${msg}</p>`;
+  logBox.textContent += `\nAverage X: ${avgX}\nAverage Y: ${avgY}\n`;
+
+  const inXRange = avgX >= X_MIN && avgX <= X_MAX;
+  const inYRange = avgY >= Y_MIN && avgY <= Y_MAX;
+
+  if (inXRange && inYRange) {
+    resultDiv.textContent = "✔ You are inside the correct area.";
+    resultDiv.style.color = "#00ff9d";
+  } else {
+    resultDiv.textContent = "✖ You are NOT in the specified area.";
+    resultDiv.style.color = "red";
+  }
+
+  statusDiv.textContent = "Done.";
 }
 
-// -----------------------
-// SAVE LOG TO LOCALSTORAGE
-// -----------------------
-function saveLog(data) {
-    let logs = JSON.parse(localStorage.getItem("gps_logs")) || [];
-    logs.push(data);
-    localStorage.setItem("gps_logs", JSON.stringify(logs));
-}
-
-// -----------------------
-// LOAD LOGS TO SCREEN
-// -----------------------
-function loadLogs() {
-    let logs = JSON.parse(localStorage.getItem("gps_logs")) || [];
-    logContainer.innerHTML = logs
-        .map(log => `
-            <div class="log-item">
-                <p>📍 <strong>${log.latitude}, ${log.longitude}</strong></p>
-                <p>Accuracy: ${log.accuracy}m – Speed: ${log.kmh} km/h</p>
-                <p>Heading: ${log.heading} – Time: ${log.timestamp}</p>
-            </div>
-        `)
-        .join("");
+function average(arr) {
+  return parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(4));
 }

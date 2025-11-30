@@ -11,11 +11,12 @@ const Y_MIN = 7.9755;
 const Y_MAX = 7.9756;
 
 checkBtn.addEventListener("click", () => {
-  statusDiv.textContent = "Collecting location readings...";
-  resultDiv.textContent = "—";
-  logBox.textContent = "";
+  alert("Button clicked");
+  console.log("Button clicked");
+  statusDiv.textContent = "Button clicked...";
   collectAveragedLocation();
 });
+
 
 function collectAveragedLocation() {
   let readingsX = [];

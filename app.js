@@ -1,7 +1,7 @@
 const readingsNeeded = 5;
 
 // Your boundary box
-const X_MAX = 5.0395;
+const X_MAX = 5.0400;
 const X_MIN = 5.0380;
 
 const Y_MAX = 7.9760;

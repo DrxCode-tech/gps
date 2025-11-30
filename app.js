@@ -1,70 +1,63 @@
-const checkBtn = document.getElementById("checkBtn");
-const output = document.getElementById("output");
-console.log("App started");
+const readingsNeeded = 5;
 
-// YOUR LOCATION RANGE (replace with your real values)
-const X_MIN = 5.0390;
+// Your boundary box
 const X_MAX = 5.0395;
+const X_MIN = 5.0390;
 
-const Y_MIN = 7.9752;
 const Y_MAX = 7.9756;
+const Y_MIN = 7.9755;
 
-checkBtn.addEventListener("click", async () => {
-  output.innerHTML = "Collecting 5 GPS readings...\n";
+document.getElementById("checkBtn").addEventListener("click", async () => {
+    const output = document.getElementById("output");
+    output.textContent = "Collecting GPS data...\n";
 
-  let xs = [];
-  let ys = [];
+    const latList = [];
+    const lonList = [];
 
-  console.log("Collecting GPS readings");
-  for (let i = 0; i < 5; i++) {
-    try {
-      const pos = await getPosition();
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
+    for (let i = 1; i <= readingsNeeded; i++) {
+        const pos = await getPosition();
 
-      xs.push(lat);
-      ys.push(lon);
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lon = parseFloat(pos.coords.longitude.toFixed(6));
 
-      output.innerHTML += `Reading ${i+1}: lat=${lat}, lon=${lon}\n`;
-    } catch (err) {
-      output.innerHTML += `ERROR: ${err.message}\n`;
+        latList.push(lat);
+        lonList.push(lon);
+
+        output.textContent += `Reading ${i}:  Lat=${lat}, Lon=${lon}\n`;
     }
 
-    await delay(1000); // 1 second delay between readings
-  }
+    // Compute averages
+    const avgLat = average(latList);
+    const avgLon = average(lonList);
 
-  if (xs.length < 5) {
-    output.innerHTML += "\n❌ Not enough readings. Try again.";
-    return;
-  }
+    output.textContent += `\nAverage Lat: ${avgLat}`;
+    output.textContent += `\nAverage Lon: ${avgLon}\n`;
 
-  // Average
-  const avgX = xs.reduce((a,b)=>a+b)/xs.length;
-  const avgY = ys.reduce((a,b)=>a+b)/ys.length;
+    const inX = avgLat <= X_MAX && avgLat >= X_MIN;
+    const inY = avgLon <= Y_MAX && avgLon >= Y_MIN;
 
-  output.innerHTML += `\nAverage Lat: ${avgX}\nAverage Lon: ${avgY}\n`;
+    output.textContent += `\nLatitude in range: ${inX}`;
+    output.textContent += `\nLongitude in range: ${inY}\n`;
 
-  const insideX = avgX >= X_MIN && avgX <= X_MAX;
-  const insideY = avgY >= Y_MIN && avgY <= Y_MAX;
-
-  if (insideX && insideY) {
-    output.innerHTML += `\n✅ You ARE inside the allowed area.`;
-  } else {
-    output.innerHTML += `\n❌ You are OUTSIDE the allowed area.`;
-  }
+    if (inX && inY) {
+        output.textContent += `\n✅ USER IS WITHIN ALLOWED LOCATION`;
+    } else {
+        output.textContent += `\n❌ USER IS OUTSIDE LOCATION`;
+    }
 });
 
-// Helper functions
+// Helper: get GPS reading (Promise version)
 function getPosition() {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 15000
+    return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            resolve,
+            reject,
+            { enableHighAccuracy: true, timeout: 15000 }
+        );
     });
-  });
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+// Helper: average numbers
+function average(arr) {
+    return (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(6);
 }

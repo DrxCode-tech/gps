@@ -1,78 +1,68 @@
 const checkBtn = document.getElementById("checkBtn");
-const statusDiv = document.getElementById("status");
-const resultDiv = document.getElementById("result");
-const logBox = document.getElementById("log");
+const output = document.getElementById("output");
 
-// YOUR RANGE LIMITS (from your data)
+// YOUR LOCATION RANGE (replace with your real values)
 const X_MIN = 5.0390;
 const X_MAX = 5.0395;
 
 const Y_MIN = 7.9755;
 const Y_MAX = 7.9756;
 
-checkBtn.addEventListener("click", () => {
-  alert("Button clicked");
-  console.log("Button clicked");
-  statusDiv.textContent = "Button clicked...";
-  collectAveragedLocation();
-});
+checkBtn.addEventListener("click", async () => {
+  output.innerHTML = "Collecting 5 GPS readings...\n";
 
+  let xs = [];
+  let ys = [];
 
-function collectAveragedLocation() {
-  let readingsX = [];
-  let readingsY = [];
-  let count = 0;
-  let totalReadingsRequired = 5;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const pos = await getPosition();
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
 
-  const interval = setInterval(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        let lat = parseFloat(pos.coords.latitude.toFixed(4));
-        let lon = parseFloat(pos.coords.longitude.toFixed(4));
+      xs.push(lat);
+      ys.push(lon);
 
-        readingsX.push(lat);
-        readingsY.push(lon);
-        count++;
+      output.innerHTML += `Reading ${i+1}: lat=${lat}, lon=${lon}\n`;
+    } catch (err) {
+      output.innerHTML += `ERROR: ${err.message}\n`;
+    }
 
-        logBox.textContent += `Reading ${count}:  X=${lat},  Y=${lon}\n`;
-
-        if (count === totalReadingsRequired) {
-          clearInterval(interval);
-          computeDecision(readingsX, readingsY);
-        }
-      },
-      (err) => {
-        logBox.textContent += `ERROR: ${err.message}\n`;
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
-    );
-  }, 1500); // wait 1.5s between each reading for accuracy
-}
-
-function computeDecision(xs, ys) {
-  const avgX = average(xs);
-  const avgY = average(ys);
-
-  logBox.textContent += `\nAverage X: ${avgX}\nAverage Y: ${avgY}\n`;
-
-  const inXRange = avgX >= X_MIN && avgX <= X_MAX;
-  const inYRange = avgY >= Y_MIN && avgY <= Y_MAX;
-
-  if (inXRange && inYRange) {
-    resultDiv.textContent = "✔ You are inside the correct area.";
-    resultDiv.style.color = "#00ff9d";
-  } else {
-    resultDiv.textContent = "✖ You are NOT in the specified area.";
-    resultDiv.style.color = "red";
+    await delay(1000); // 1 second delay between readings
   }
 
-  statusDiv.textContent = "Done.";
+  if (xs.length < 5) {
+    output.innerHTML += "\n❌ Not enough readings. Try again.";
+    return;
+  }
+
+  // Average
+  const avgX = xs.reduce((a,b)=>a+b)/xs.length;
+  const avgY = ys.reduce((a,b)=>a+b)/ys.length;
+
+  output.innerHTML += `\nAverage Lat: ${avgX}\nAverage Lon: ${avgY}\n`;
+
+  const insideX = avgX >= X_MIN && avgX <= X_MAX;
+  const insideY = avgY >= Y_MIN && avgY <= Y_MAX;
+
+  if (insideX && insideY) {
+    output.innerHTML += `\n✅ You ARE inside the allowed area.`;
+  } else {
+    output.innerHTML += `\n❌ You are OUTSIDE the allowed area.`;
+  }
+});
+
+// Helper functions
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000
+    });
+  });
 }
 
-function average(arr) {
-  return parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(4));
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

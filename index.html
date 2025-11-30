@@ -3,28 +3,25 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Geolocation Tracker</title>
+    <title>Offline Geolocation Tracker</title>
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
     <div class="container">
-        <h1>📍 Your Location</h1>
+        <h1>📍 Offline Geolocation Tracker</h1>
 
-        <button id="getLocationBtn">Get My Location</button>
+        <button id="startTracking">Start Tracking</button>
+        <button id="stopTracking" class="stop">Stop Tracking</button>
 
-        <div id="output" class="output">
-            <p>Click the button to fetch location…</p>
+        <div class="output" id="locationOutput">
+            <p>Press "Start Tracking"…</p>
         </div>
 
-        <iframe
-            id="mapFrame"
-            width="100%"
-            height="300"
-            style="border:0; margin-top:20px; display:none;"
-            loading="lazy"
-            allowfullscreen
-        ></iframe>
+        <h2>📜 Saved Logs</h2>
+        <div id="logContainer" class="logs"></div>
+
+        <button id="clearLogs" class="clear">Clear Logs</button>
     </div>
 
     <script src="app.js"></script>

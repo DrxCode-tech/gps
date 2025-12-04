@@ -1,18 +1,386 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Geo Verify</title>
-    <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GeoTracker — Offline Geolocation Logger</title>
+<style>
+  :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;--bg:#0f1724;--card:#0b1220;--muted:#91a0b4;--accent:#10b981}
+  body{margin:0;background:linear-gradient(180deg,#071223 0%, #071933 100%);color:#e6eef6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+  .wrap{width:100%;max-width:980px}
+  header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:14px}
+  h1{font-size:18px;margin:0}
+  .card{background:rgba(255,255,255,0.03);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+  .stat{display:flex;flex-direction:column;gap:6px}
+  .big{font-size:20px;font-weight:700}
+  .muted{color:var(--muted);font-size:13px}
+  button{background:var(--accent);border:0;padding:10px 12px;border-radius:8px;color:#022;cursor:pointer;font-weight:600}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit}
+  ul{list-style:none;padding:0;margin:0;max-height:360px;overflow:auto}
+  li{padding:8px;border-bottom:1px solid rgba(255,255,255,0.02);font-size:13px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .small{font-size:12px}
+  textarea{width:100%;height:100px;background:#071225;border-radius:8px;color:#e6eef6;padding:8px;border:1px solid rgba(255,255,255,0.03)}
+  footer{font-size:12px;color:var(--muted);margin-top:8px}
+  .status{padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.02);display:inline-block}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}.wrap{padding:6px}}
+</style>
 </head>
 <body>
-    <div class="box">
-        <h2>Location Verification</h2>
-        <button id="checkBtn">Check My Position</button>
+  <div class="wrap">
+    <header>
+      <h1>GeoTracker — Offline geolocation logger</h1>
+      <div>
+        <span class="status" id="sw-status">SW: init</span>
+      </div>
+    </header>
 
-        <pre id="output"></pre>
+    <div class="grid">
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+          <div>
+            <div class="muted">Current Position</div>
+            <div class="big" id="coords">—</div>
+            <div class="muted small" id="timestamp">—</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="muted">Distance moved</div>
+            <div class="big" id="distance">0 m</div>
+            <div class="muted small" id="count">0 records</div>
+          </div>
+        </div>
+
+        <hr style="opacity:.06;margin:12px 0">
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" class="controls">
+          <button id="start">Start tracking</button>
+          <button id="stop" class="ghost">Stop</button>
+          <button id="export" class="ghost">Export CSV</button>
+          <button id="clear" class="ghost">Clear logs</button>
+          <label style="margin-left:auto" class="muted small">Interval:
+            <select id="interval">
+              <option value="1000">1s</option>
+              <option value="3000" selected>3s</option>
+              <option value="5000">5s</option>
+              <option value="10000">10s</option>
+            </select>
+          </label>
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <div class="stat">
+            <div class="muted small">Accuracy</div>
+            <div id="accuracy">—</div>
+          </div>
+          <div class="stat">
+            <div class="muted small">Speed</div>
+            <div id="speed">—</div>
+          </div>
+          <div class="stat">
+            <div class="muted small">Heading</div>
+            <div id="heading">—</div>
+          </div>
+        </div>
+
+        <hr style="opacity:.06;margin:12px 0">
+
+        <div>
+          <div class="muted small">Log (most recent first)</div>
+          <ul id="loglist" aria-live="polite"></ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="muted small">Raw / Export preview</div>
+          <textarea id="preview" readonly placeholder="CSV preview will appear here..."></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="download" class="ghost">Download CSV</button>
+            <button id="show-json" class="ghost">Show JSON</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted small">Notes</div>
+          <div style="margin-top:8px" class="muted">
+            - Open on <strong>localhost</strong> or via <strong>https</strong> to allow Geolocation. <br>
+            - Works offline once loaded (Service Worker caches the page). <br>
+            - Distance uses Haversine; move physically to see changes. <br>
+            - Export to CSV for analysis.
+          </div>
+          <footer>Built: single-file demo — no external libs.</footer>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <script src="app.js"></script>
+<script>
+/* =========================
+   Simple IndexedDB wrapper
+   ========================= */
+const DB_NAME = 'geotracker-db';
+const STORE = 'positions';
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function addEntry(entry) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).add(entry);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function getAllEntries() {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const q = tx.objectStore(STORE).getAll();
+    q.onsuccess = () => res(q.result.sort((a,b)=>b.ts-a.ts)); // newest first
+    q.onerror = () => rej(q.error);
+  });
+}
+async function clearAll() {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+/* =========================
+   Helper: Haversine distance
+   ========================= */
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const toRad = v => v * Math.PI / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+/* =========================
+   UI & tracking logic
+   ========================= */
+let watchId = null;
+let lastPos = null;
+let totalDist = 0;
+const coordsEl = document.getElementById('coords');
+const accuracyEl = document.getElementById('accuracy');
+const speedEl = document.getElementById('speed');
+const headingEl = document.getElementById('heading');
+const timestampEl = document.getElementById('timestamp');
+const distanceEl = document.getElementById('distance');
+const loglist = document.getElementById('loglist');
+const countEl = document.getElementById('count');
+const intervalSelect = document.getElementById('interval');
+const preview = document.getElementById('preview');
+
+document.getElementById('start').addEventListener('click', startTracking);
+document.getElementById('stop').addEventListener('click', stopTracking);
+document.getElementById('export').addEventListener('click', exportCSV);
+document.getElementById('clear').addEventListener('click', async () => {
+  if (!confirm('Clear all saved logs?')) return;
+  await clearAll();
+  totalDist = 0; lastPos = null;
+  await refreshUI();
+});
+document.getElementById('download').addEventListener('click', downloadCSV);
+document.getElementById('show-json').addEventListener('click', async () => {
+  const all = await getAllEntries();
+  preview.value = JSON.stringify(all, null, 2);
+});
+
+async function refreshUI() {
+  const entries = await getAllEntries();
+  loglist.innerHTML = '';
+  for (const e of entries) {
+    const li = document.createElement('li');
+    li.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px"><div>
+      <strong>${e.lat.toFixed(6)}, ${e.lon.toFixed(6)}</strong>
+      <div class="muted small">${new Date(e.ts).toLocaleString()}</div>
+      </div><div style="text-align:right">
+      <div class="muted small">Δ: ${e.delta? e.delta.toFixed(1)+' m':''}</div>
+      <div class="muted small">${e.acc? 'acc '+e.acc+' m':''}</div>
+      </div></div>`;
+    loglist.appendChild(li);
+  }
+  countEl.textContent = `${entries.length} records`;
+  // CSV preview
+  preview.value = csvFrom(entries.slice().reverse()); // oldest first in CSV
+}
+
+function csvFrom(entries) {
+  const header = ['id','timestamp','lat','lon','accuracy_m','speed_m_s','heading','delta_m'];
+  const rows = [header.join(',')];
+  for (const e of entries) {
+    rows.push([e.id || '', new Date(e.ts).toISOString(), e.lat, e.lon, e.acc ?? '', e.speed ?? '', e.heading ?? '', e.delta ?? ''].join(','));
+  }
+  return rows.join('\n');
+}
+
+async function downloadCSV() {
+  const entries = await getAllEntries();
+  const csv = csvFrom(entries.slice().reverse());
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'geotracker_export.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportCSV() {
+  await downloadCSV();
+  alert('CSV generated and download started (if allowed by browser).');
+}
+
+function updateCurrentUI(pos, delta) {
+  coordsEl.textContent = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+  accuracyEl.textContent = pos.coords.accuracy ? `${pos.coords.accuracy} m` : '—';
+  speedEl.textContent = pos.coords.speed != null ? `${pos.coords.speed} m/s` : '—';
+  headingEl.textContent = pos.coords.heading != null ? `${pos.coords.heading}°` : '—';
+  timestampEl.textContent = new Date(pos.timestamp).toLocaleString();
+  if (delta !== undefined) {
+    distanceEl.textContent = `${totalDist.toFixed(1)} m`;
+  }
+}
+
+async function handlePosition(pos) {
+  // compute delta vs last
+  let delta = 0;
+  if (lastPos) {
+    delta = haversineMeters(lastPos.lat, lastPos.lon, pos.coords.latitude, pos.coords.longitude);
+    totalDist += delta;
+  }
+  lastPos = { lat: pos.coords.latitude, lon: pos.coords.longitude, ts: pos.timestamp };
+  updateCurrentUI(pos, delta);
+  // persist
+  await addEntry({
+    ts: pos.timestamp,
+    lat: pos.coords.latitude,
+    lon: pos.coords.longitude,
+    acc: pos.coords.accuracy,
+    speed: pos.coords.speed,
+    heading: pos.coords.heading,
+    delta: delta
+  });
+  await refreshUI();
+}
+
+/* Start & stop */
+function startTracking() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not available in this browser.');
+    return;
+  }
+  // clear previous watch
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  const opts = {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 10000
+  };
+  // We implement a manual interval by ignoring rapid updates if needed
+  let lastTs = 0;
+  const minInterval = Number(intervalSelect.value);
+  watchId = navigator.geolocation.watchPosition(async pos => {
+    const now = Date.now();
+    if (now - lastTs < minInterval) {
+      // ignore if too frequent
+      return;
+    }
+    lastTs = now;
+    await handlePosition(pos);
+  }, err => {
+    console.error('geo error', err);
+    alert('Geolocation error: ' + (err.message || err.code));
+  }, opts);
+  document.getElementById('start').disabled = true;
+  document.getElementById('stop').disabled = false;
+}
+
+function stopTracking() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  document.getElementById('start').disabled = false;
+  document.getElementById('stop').disabled = true;
+}
+
+/* Initialize UI state */
+document.getElementById('stop').disabled = true;
+refreshUI();
+
+/* =========================
+   Service Worker (inline via Blob)
+   ========================= */
+async function registerInlineSW() {
+  if (!('serviceWorker' in navigator)) {
+    document.getElementById('sw-status').textContent = 'SW: unsupported';
+    return;
+  }
+  // Service worker source (caches only the page and assets)
+  const swSource = `
+    const CACHE = 'geotracker-cache-v1';
+    const toCache = ['./'];
+    self.addEventListener('install', e => {
+      self.skipWaiting();
+      e.waitUntil(
+        caches.open(CACHE).then(c => c.addAll(toCache))
+      );
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(self.clients.claim());
+    });
+    self.addEventListener('fetch', e => {
+      if (e.request.method !== 'GET') return;
+      e.respondWith(
+        caches.match(e.request).then(r => r || fetch(e.request).then(fetchRes => {
+          // cache same-origin navigations and requests
+          if (e.request.url.startsWith(self.location.origin)) {
+            caches.open(CACHE).then(c => c.put(e.request, fetchRes.clone()));
+          }
+          return fetchRes;
+        }).catch(()=> caches.match('./') ))
+      );
+    });
+  `;
+  try {
+    const blob = new Blob([swSource], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    const reg = await navigator.serviceWorker.register(swUrl);
+    document.getElementById('sw-status').textContent = 'SW: registered';
+    reg.onupdatefound = () => document.getElementById('sw-status').textContent = 'SW: update found';
+  } catch (err) {
+    console.error('SW registration failed', err);
+    document.getElementById('sw-status').textContent = 'SW: failed';
+  }
+}
+registerInlineSW();
+
+/* Helpful hint for testers */
+if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+  console.warn('Geolocation requires HTTPS in many browsers (unless localhost).');
+}
+</script>
 </body>
 </html>
